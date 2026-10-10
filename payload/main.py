@@ -47,7 +47,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QMessageBox, QTableWidget, QTableWidgetItem,
     QHeaderView, QComboBox, QCalendarWidget, QLCDNumber, QSlider,
     QCheckBox, QSpinBox, QTabWidget, QProgressBar, QGraphicsDropShadowEffect,
-    QMenu, QInputDialog, QAbstractItemView, QStackedWidget, QSystemTrayIcon
+    QMenu, QInputDialog, QAbstractItemView, QStackedWidget, QSystemTrayIcon, QDialog
 )
 
 from mediapipe.tasks import python
@@ -3671,6 +3671,67 @@ class SettingsWidget(QWidget):
         self.key.clear()
 
 
+class RegistrationGate(QDialog):
+    def __init__(self, settings: AppSettings):
+        super().__init__(None)
+        self.settings = settings
+        self.session: Optional[dict[str, Any]] = None
+        self.setWindowTitle(f"{APP_NAME} — Account required")
+        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+        self.setWindowModality(Qt.WindowModality.ApplicationModal)
+        self.setStyleSheet("QDialog{background:#03080D;color:#EAFBFF;} QLabel{color:#DDF7FF;} QLineEdit{background:#0B1B27;color:#EAFBFF;border:1px solid #28758E;border-radius:10px;padding:14px;font-size:16px;} QPushButton{background:#17495D;color:#EAFBFF;border:1px solid #4EA7C1;border-radius:10px;padding:14px;font-size:16px;font-weight:700;} QPushButton:hover{background:#225C70;}")
+        outer = QVBoxLayout(self)
+        outer.addStretch(1)
+        card = QFrame()
+        card.setMaximumWidth(560)
+        card.setStyleSheet("QFrame{background:#0A1A25;border:1px solid #28758E;border-radius:22px;}")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(36, 34, 36, 34)
+        title = QLabel("NEXUS ULTRON")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setStyleSheet("font-size:30px;font-weight:800;color:#8BE9FF;border:0;")
+        subtitle = QLabel("Create an account or log in to continue")
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        subtitle.setWordWrap(True)
+        subtitle.setStyleSheet("font-size:17px;border:0;padding:8px;")
+        self.email = QLineEdit()
+        self.email.setPlaceholderText("Email")
+        self.password = QLineEdit()
+        self.password.setPlaceholderText("Password")
+        self.password.setEchoMode(QLineEdit.EchoMode.Password)
+        create = QPushButton("Create account")
+        login = QPushButton("Log in")
+        create.clicked.connect(lambda: self.authenticate(True))
+        login.clicked.connect(lambda: self.authenticate(False))
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+        layout.addWidget(self.email)
+        layout.addWidget(self.password)
+        layout.addWidget(create)
+        layout.addWidget(login)
+        outer.addWidget(card, 0, Qt.AlignmentFlag.AlignHCenter)
+        outer.addStretch(1)
+
+    def authenticate(self, signup: bool) -> None:
+        try:
+            email = self.email.text().strip()
+            password = self.password.text()
+            if not email or not password:
+                raise ValueError("Enter your email and password.")
+            endpoint = "signup" if signup else "token?grant_type=password"
+            result = AIClient.auth_request(endpoint, {"email": email, "password": password})
+            if not result.get("access_token"):
+                QMessageBox.information(self, APP_NAME, result.get("msg") or "Account created. Check your email to confirm, then log in.")
+                return
+            self.session = result
+            self.accept()
+        except Exception as exc:
+            QMessageBox.warning(self, APP_NAME, f"Account error:\n{exc}")
+
+    def closeEvent(self, event) -> None:
+        event.ignore()
+
+
 class WorldMapWidget(QWidget):
     """Personal operating map: projects, goals, devices, ideas and skills."""
 
@@ -5875,8 +5936,12 @@ def main() -> None:
     settings = AppSettings.load()
     window = MainWindow(settings)
     app.aboutToQuit.connect(window.canvas.close_all_resources)
+    registration = RegistrationGate(settings)
+    registration.showFullScreen()
+    if registration.exec() != QDialog.DialogCode.Accepted or not registration.session:
+        sys.exit(0)
+    window._on_supabase_authenticated(registration.session)
     window.show()
-    window.canvas.add_settings_window()
     sys.exit(app.exec())
 
 
