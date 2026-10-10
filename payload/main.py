@@ -3615,7 +3615,7 @@ class SettingsWidget(QWidget):
         layout.addLayout(form)
         layout.addWidget(gemini)
         layout.addWidget(save)
-        layout.addWidget(QLabel("Supabase account and cloud chat"))
+        layout.addWidget(QLabel("Register or log in to save your account and chat to the cloud"))
         layout.addLayout(auth_form)
         layout.addLayout(auth_actions)
         layout.addWidget(note)
@@ -5876,6 +5876,7 @@ def main() -> None:
     window = MainWindow(settings)
     app.aboutToQuit.connect(window.canvas.close_all_resources)
     window.show()
+    window.canvas.add_settings_window()
     sys.exit(app.exec())
 
 
