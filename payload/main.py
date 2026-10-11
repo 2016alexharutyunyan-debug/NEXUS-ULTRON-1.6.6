@@ -3677,7 +3677,13 @@ class RegistrationGate(QDialog):
         self.settings = settings
         self.session: Optional[dict[str, Any]] = None
         self.setWindowTitle(f"{APP_NAME} — Account required")
-        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+        self.setWindowFlags(
+            Qt.WindowType.Window
+            | Qt.WindowType.WindowTitleHint
+            | Qt.WindowType.WindowMinimizeButtonHint
+            | Qt.WindowType.WindowMaximizeButtonHint
+            | Qt.WindowType.WindowCloseButtonHint
+        )
         self.setWindowModality(Qt.WindowModality.ApplicationModal)
         self.setStyleSheet("QDialog{background:#03080D;color:#EAFBFF;} QLabel{color:#DDF7FF;} QLineEdit{background:#0B1B27;color:#EAFBFF;border:1px solid #28758E;border-radius:10px;padding:14px;font-size:16px;} QPushButton{background:#17495D;color:#EAFBFF;border:1px solid #4EA7C1;border-radius:10px;padding:14px;font-size:16px;font-weight:700;} QPushButton:hover{background:#225C70;}")
         outer = QVBoxLayout(self)
@@ -3729,7 +3735,7 @@ class RegistrationGate(QDialog):
             QMessageBox.warning(self, APP_NAME, f"Account error:\n{exc}")
 
     def closeEvent(self, event) -> None:
-        event.ignore()
+        event.accept()
 
 
 class WorldMapWidget(QWidget):
@@ -5935,7 +5941,7 @@ def main() -> None:
     app.setFont(QFont("Segoe UI", 10))
     settings = AppSettings.load()
     registration = RegistrationGate(settings)
-    registration.showFullScreen()
+    registration.showMaximized()
     if registration.exec() != QDialog.DialogCode.Accepted or not registration.session:
         sys.exit(0)
     window = MainWindow(settings)
