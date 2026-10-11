@@ -411,6 +411,57 @@ class AppSettings:
         SETTINGS_PATH.write_text(json.dumps(asdict(self), ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+AUTH_CREDENTIAL_TARGET = "NEXUS_ULTRON_SUPABASE_REFRESH_TOKEN"
+
+
+def save_auth_refresh_token(session: dict[str, Any]) -> bool:
+    refresh_token = session.get("refresh_token")
+    if not refresh_token or not IS_WINDOWS:
+        return False
+    try:
+        import win32cred
+
+        win32cred.CredWrite(
+            {
+                "Type": win32cred.CRED_TYPE_GENERIC,
+                "TargetName": AUTH_CREDENTIAL_TARGET,
+                "UserName": (session.get("user") or {}).get("email", APP_NAME),
+                "CredentialBlob": refresh_token,
+                "Persist": win32cred.CRED_PERSIST_LOCAL_MACHINE,
+            },
+            0,
+        )
+        return True
+    except Exception:
+        return False
+
+
+def load_auth_refresh_token() -> Optional[str]:
+    if not IS_WINDOWS:
+        return None
+    try:
+        import win32cred
+
+        credential = win32cred.CredRead(AUTH_CREDENTIAL_TARGET, win32cred.CRED_TYPE_GENERIC, 0)
+        refresh_token = credential.get("CredentialBlob")
+        if isinstance(refresh_token, bytes):
+            refresh_token = refresh_token.decode("utf-8")
+        return refresh_token or None
+    except Exception:
+        return None
+
+
+def clear_auth_refresh_token() -> None:
+    if not IS_WINDOWS:
+        return
+    try:
+        import win32cred
+
+        win32cred.CredDelete(AUTH_CREDENTIAL_TARGET, win32cred.CRED_TYPE_GENERIC, 0)
+    except Exception:
+        pass
+
+
 class ExponentialSmoother:
     def __init__(self, alpha: float = 0.42, deadzone: float = 0.0025):
         self.alpha = alpha
@@ -3652,6 +3703,8 @@ class SettingsWidget(QWidget):
             if not result.get("access_token"):
                 QMessageBox.information(self, APP_NAME, result.get("msg") or "Account created. Check your email to confirm, then log in.")
                 return
+            if not save_auth_refresh_token(result):
+                QMessageBox.warning(self, APP_NAME, "Signed in, but automatic sign-in could not be saved in Windows Credential Manager.")
             self.auth_session = result
             self.auth_session_changed.emit(result)
             self.authenticated.emit(result)
@@ -3661,6 +3714,7 @@ class SettingsWidget(QWidget):
 
     def logout(self) -> None:
         self.auth_session = None
+        clear_auth_refresh_token()
         self.auth_session_changed.emit(None)
         self.auth_password.clear()
         QMessageBox.information(self, APP_NAME, "Logged out. Cloud chat is disconnected.")
@@ -3729,6 +3783,8 @@ class RegistrationGate(QDialog):
             if not result.get("access_token"):
                 QMessageBox.information(self, APP_NAME, result.get("msg") or "Account created. Check your email to confirm, then log in.")
                 return
+            if not save_auth_refresh_token(result):
+                QMessageBox.warning(self, APP_NAME, "Signed in, but automatic sign-in could not be saved in Windows Credential Manager.")
             self.session = result
             self.accept()
         except Exception as exc:
@@ -5940,13 +5996,32 @@ def main() -> None:
     app.setApplicationVersion(APP_VERSION)
     app.setFont(QFont("Segoe UI", 10))
     settings = AppSettings.load()
-    registration = RegistrationGate(settings)
-    registration.showMaximized()
-    if registration.exec() != QDialog.DialogCode.Accepted or not registration.session:
-        sys.exit(0)
+    session = None
+    refresh_token = load_auth_refresh_token()
+    if refresh_token:
+        try:
+            session = AIClient.auth_request(
+                "token?grant_type=refresh_token",
+                {"refresh_token": refresh_token},
+            )
+            if not save_auth_refresh_token(session):
+                clear_auth_refresh_token()
+                session = None
+        except Exception as exc:
+            cause = getattr(exc, "__cause__", None)
+            if isinstance(cause, urllib.error.HTTPError) and cause.code in {400, 401, 403}:
+                clear_auth_refresh_token()
+            else:
+                air_log(f"Saved Supabase session restore failed: {type(exc).__name__}: {exc}")
+    if not session:
+        registration = RegistrationGate(settings)
+        registration.showMaximized()
+        if registration.exec() != QDialog.DialogCode.Accepted or not registration.session:
+            sys.exit(0)
+        session = registration.session
     window = MainWindow(settings)
     app.aboutToQuit.connect(window.canvas.close_all_resources)
-    window._on_supabase_authenticated(registration.session)
+    window._on_supabase_authenticated(session)
     if window.tray_icon is None:
         window.show()
     else:
