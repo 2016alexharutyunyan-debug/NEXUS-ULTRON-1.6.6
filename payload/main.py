@@ -5880,7 +5880,7 @@ class MainWindow(QMainWindow):
     def changeEvent(self, event) -> None:
         super().changeEvent(event)
         if event.type() == QEvent.Type.WindowStateChange and self.isMinimized():
-            QTimer.singleShot(0, self._hide_to_tray)
+            self._hide_to_tray()
 
     def _hide_to_tray(self) -> None:
         if self.tray_icon is None or self._force_exit:
