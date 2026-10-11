@@ -13,7 +13,7 @@ NEXUS ULTRON is a Python desktop AI assistant for Windows, combining voice inter
 
 1. Download or clone this repository on Windows.
 2. Run `START_NEXUS_SUPABASE.bat`.
-3. Register or log in in the full-screen account window.
+3. Register or log in in the full-screen account window. After login, NEXUS runs in the system tray; double-click its tray icon to open the desktop assistant.
 
 ## One-time Supabase database setup
 

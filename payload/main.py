@@ -5934,14 +5934,22 @@ def main() -> None:
     app.setApplicationVersion(APP_VERSION)
     app.setFont(QFont("Segoe UI", 10))
     settings = AppSettings.load()
-    window = MainWindow(settings)
-    app.aboutToQuit.connect(window.canvas.close_all_resources)
     registration = RegistrationGate(settings)
     registration.showFullScreen()
     if registration.exec() != QDialog.DialogCode.Accepted or not registration.session:
         sys.exit(0)
+    window = MainWindow(settings)
+    app.aboutToQuit.connect(window.canvas.close_all_resources)
     window._on_supabase_authenticated(registration.session)
-    window.show()
+    if window.tray_icon is None:
+        window.show()
+    else:
+        window.tray_icon.showMessage(
+            APP_NAME,
+            "Signed in and running in the background. Open NEXUS from the system tray.",
+            QSystemTrayIcon.MessageIcon.Information,
+            3000,
+        )
     sys.exit(app.exec())
 
 
